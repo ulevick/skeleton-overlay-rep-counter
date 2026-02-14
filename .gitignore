@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+*.pyc
+.idea/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+*.iml
+
+# Results / data (commit sample inputs/outputs)
+# To ignore them again, uncomment the lines below:
+# results/
+# data/models/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
