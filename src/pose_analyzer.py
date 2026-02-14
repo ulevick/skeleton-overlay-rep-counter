@@ -8,6 +8,8 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+from .exercise_detector import ExerciseDetector
+from .rep_counter import RepCounter
 from .utils import calculate_angle, landmark_xy, landmark_xy_visibility, safe_mean, visibility_score
 
 _HAS_SOLUTIONS = hasattr(mp, "solutions")
@@ -153,30 +155,23 @@ class PoseAnalyzer:
             self.drawer = mp.solutions.drawing_utils
             self.drawing_styles = mp.solutions.drawing_styles
 
-        self.rep_count = 0
-        self.stage = "up"
+        self.counter = RepCounter()
         self.hip_angle_history: deque[float] = deque(maxlen=self.config.smoothing_window)
         self.knee_angle_history: deque[float] = deque(maxlen=self.config.smoothing_window)
         self.back_angle_history: deque[float] = deque(maxlen=self.config.smoothing_window)
-        self.rep_events: List[float] = []
-        self.last_rep_time = -1.0
-        self.knee_warn_counter = 0
-        self.back_warn_counter = 0
-        self.elbow_warn_counter = 0
-        self.exercise_type: Optional[str] = None
-        self.exercise_locked = False
-        self.exercise_votes = {"rdl": 0, "trx_pike": 0}
-        self.classify_frame_count = 0
-        self.exercise_candidate: Optional[str] = None
-        self.trx_pike_gate_count = 0
-        self.pike_up_counter = 0
-        self.pike_down_counter = 0
+        self.detector = ExerciseDetector(
+            exercise_classify_frames=self.config.exercise_classify_frames,
+            exercise_min_confidence=self.config.exercise_min_confidence,
+            trx_pike_gate_frames=self.config.trx_pike_gate_frames,
+        )
         self.elbow_angle_history: deque[float] = deque(maxlen=self.config.smoothing_window)
         self.body_angle_history: deque[float] = deque(maxlen=self.config.smoothing_window)
         self.hip_lift_history: deque[float] = deque(maxlen=self.config.smoothing_window)
 
         if self.config.exercise_mode != "auto":
-            self._set_exercise_type(self.config.exercise_mode)
+            exercise = self.detector.set_exercise_type(self.config.exercise_mode)
+            if exercise:
+                self.counter.reset_for_exercise(exercise)
 
     def close(self) -> None:
         self.pose.close()
@@ -218,10 +213,10 @@ class PoseAnalyzer:
             "tracking_display": "low",
             "exercise": "detecting",
             "exercise_confidence": 0.0,
-            "exercise_locked": False,
+            "exercise_locked": self.detector.exercise_locked,
             "strap_confidence": 0.0,
-            "stage": self.stage,
-            "rep_count": self.rep_count,
+            "stage": self.counter.stage,
+            "rep_count": self.counter.rep_count,
             "warnings": [],
             "pose_detected": False,
         }
@@ -353,7 +348,7 @@ class PoseAnalyzer:
 
         strap_confidence = self._estimate_trx_straps(frame, landmarks)
         record["strap_confidence"] = strap_confidence
-        self._update_exercise_type(
+        new_exercise = self.detector.update(
             hip_angle_smooth,
             knee_angle_smooth,
             elbow_angle_smooth,
@@ -366,8 +361,10 @@ class PoseAnalyzer:
             hip_over_shoulder,
             wrist_on_ground,
         )
-        record["exercise"] = self.exercise_type or self.exercise_candidate or "detecting"
-        record["exercise_confidence"] = self._exercise_confidence(
+        if new_exercise:
+            self.counter.reset_for_exercise(new_exercise)
+        record["exercise"] = self.detector.exercise_type or self.detector.exercise_candidate or "detecting"
+        record["exercise_confidence"] = self.detector.confidence(
             hip_angle_smooth,
             knee_angle_smooth,
             elbow_angle_smooth,
@@ -380,30 +377,32 @@ class PoseAnalyzer:
             hip_over_shoulder,
             wrist_on_ground,
         )
-        record["exercise_locked"] = self.exercise_locked
+        record["exercise_locked"] = self.detector.exercise_locked
 
         warnings = []
-        if self.exercise_type == "rdl":
-            warnings = self._process_rdl(
-                hip_angle_smooth,
-                knee_angle_smooth,
-                back_angle_smooth,
-                tracking_ok,
-                timestamp_s,
+        if self.detector.exercise_type == "rdl":
+            warnings = self.counter.process_rdl(
+                hip_angle_smooth=hip_angle_smooth,
+                knee_angle_smooth=knee_angle_smooth,
+                back_angle_smooth=back_angle_smooth,
+                tracking_ok=tracking_ok,
+                timestamp_s=timestamp_s,
+                config=self.config,
             )
-        elif self.exercise_type == "trx_pike":
-            warnings = self._process_trx_pike(
-                elbow_angle_smooth,
-                body_angle_smooth,
-                knee_angle_smooth,
-                hip_lift_smooth,
-                tracking_ok,
-                timestamp_s,
+        elif self.detector.exercise_type == "trx_pike":
+            warnings = self.counter.process_trx_pike(
+                elbow_angle_smooth=elbow_angle_smooth,
+                body_angle_smooth=body_angle_smooth,
+                knee_angle_smooth=knee_angle_smooth,
+                hip_lift_smooth=hip_lift_smooth,
+                tracking_ok=tracking_ok,
+                timestamp_s=timestamp_s,
+                config=self.config,
             )
 
         record["warnings"] = warnings
-        record["stage"] = self.stage
-        record["rep_count"] = self.rep_count
+        record["stage"] = self.counter.stage
+        record["rep_count"] = self.counter.rep_count
 
         annotated = frame.copy()
         draw_side = None
@@ -414,17 +413,17 @@ class PoseAnalyzer:
 
         if with_overlay:
             exercise_title = (
-                self.exercise_type.replace("_", " ").title()
-                if self.exercise_type
+                self.detector.exercise_type.replace("_", " ").title()
+                if self.detector.exercise_type
                 else "Detecting exercise"
             )
             overlay_lines = [
                 exercise_title,
-                f"Reps: {self.rep_count}",
+                f"Reps: {self.counter.rep_count}",
                 f"Hip angle: {self._fmt_angle(hip_angle_smooth)}",
                 f"Elbow angle: {self._fmt_angle(elbow_angle_smooth)}",
                 f"Body angle: {self._fmt_angle(body_angle_smooth)}",
-                f"Stage: {self.stage}",
+                f"Stage: {self.counter.stage}",
                 f"Tracking: {'ok' if tracking_ok else 'low'}",
             ]
             annotated, panel_rect = self._draw_panel(
@@ -447,289 +446,21 @@ class PoseAnalyzer:
 
         return annotated, record
 
-    def _set_exercise_type(self, exercise: str) -> None:
-        if exercise not in {"rdl", "trx_pike"}:
-            return
-        self.exercise_type = exercise
-        self.exercise_candidate = exercise
-        self.exercise_locked = True
-        self.rep_count = 0
-        self.rep_events = []
-        self.last_rep_time = -1.0
-        self.knee_warn_counter = 0
-        self.back_warn_counter = 0
-        self.elbow_warn_counter = 0
-        self.stage = "up" if exercise == "rdl" else "plank"
+    @property
+    def rep_count(self) -> int:
+        return self.counter.rep_count
 
-    def _exercise_scores(
-        self,
-        hip_angle: float,
-        knee_angle: float,
-        elbow_angle: float,
-        body_angle: float,
-        strap_confidence: float,
-        hip_lift: float,
-        ankle_above_hip: bool,
-        ankle_below_hip: bool,
-        wrist_below_shoulder: bool,
-        hip_over_shoulder: bool,
-        wrist_on_ground: bool,
-    ) -> Tuple[float, float]:
-        trx_score = 0.0
-        if not np.isnan(hip_lift) and hip_lift > 0.22:
-            trx_score += 1.6
-        if not np.isnan(body_angle) and body_angle < 120.0:
-            trx_score += 1.2
-        if ankle_above_hip:
-            trx_score += 0.8
-        if not np.isnan(knee_angle) and knee_angle < 150.0:
-            trx_score += 0.5
-        if wrist_below_shoulder:
-            trx_score += 0.4
-        if hip_over_shoulder:
-            trx_score += 0.8
-        if wrist_on_ground:
-            trx_score += 0.6
-        if not np.isnan(elbow_angle) and elbow_angle > 150.0:
-            trx_score += 0.2
-        if strap_confidence >= 0.5:
-            trx_score += 0.6
+    @property
+    def rep_events(self) -> List[float]:
+        return self.counter.rep_events
 
-        rdl_score = 0.0
-        if not np.isnan(hip_angle) and hip_angle < 150.0:
-            rdl_score += 1.2
-        if not np.isnan(knee_angle) and knee_angle > 150.0:
-            rdl_score += 0.9
-        if not np.isnan(body_angle) and body_angle > 120.0:
-            rdl_score += 0.6
-        if not np.isnan(elbow_angle) and elbow_angle > 150.0:
-            rdl_score += 0.4
-        if ankle_below_hip:
-            rdl_score += 0.5
-        if not np.isnan(hip_lift) and hip_lift < 0.2:
-            rdl_score += 0.4
-        if hip_over_shoulder:
-            rdl_score -= 0.8
-        if wrist_on_ground:
-            rdl_score -= 0.4
-        rdl_score = max(rdl_score, 0.0)
+    @property
+    def exercise_type(self) -> Optional[str]:
+        return self.detector.exercise_type
 
-        trx_conf = min(trx_score / 5.4, 1.0)
-        rdl_conf = min(rdl_score / 4.0, 1.0)
-        return rdl_conf, trx_conf
-
-    def _exercise_confidence(
-        self,
-        hip_angle: float,
-        knee_angle: float,
-        elbow_angle: float,
-        body_angle: float,
-        strap_confidence: float,
-        hip_lift: float,
-        ankle_above_hip: bool,
-        ankle_below_hip: bool,
-        wrist_below_shoulder: bool,
-        hip_over_shoulder: bool,
-        wrist_on_ground: bool,
-    ) -> float:
-        rdl_conf, trx_conf = self._exercise_scores(
-            hip_angle,
-            knee_angle,
-            elbow_angle,
-            body_angle,
-            strap_confidence,
-            hip_lift,
-            ankle_above_hip,
-            ankle_below_hip,
-            wrist_below_shoulder,
-            hip_over_shoulder,
-            wrist_on_ground,
-        )
-        return float(max(rdl_conf, trx_conf))
-
-    def _update_exercise_type(
-        self,
-        hip_angle: float,
-        knee_angle: float,
-        elbow_angle: float,
-        body_angle: float,
-        strap_confidence: float,
-        hip_lift: float,
-        ankle_above_hip: bool,
-        ankle_below_hip: bool,
-        wrist_below_shoulder: bool,
-        hip_over_shoulder: bool,
-        wrist_on_ground: bool,
-    ) -> None:
-        if self.exercise_locked:
-            return
-
-        if hip_over_shoulder and wrist_on_ground and not np.isnan(hip_lift) and hip_lift > 0.18:
-            self.trx_pike_gate_count += 1
-        else:
-            self.trx_pike_gate_count = 0
-
-        if self.trx_pike_gate_count >= self.config.trx_pike_gate_frames:
-            self._set_exercise_type("trx_pike")
-            return
-
-        rdl_conf, trx_conf = self._exercise_scores(
-            hip_angle,
-            knee_angle,
-            elbow_angle,
-            body_angle,
-            strap_confidence,
-            hip_lift,
-            ankle_above_hip,
-            ankle_below_hip,
-            wrist_below_shoulder,
-            hip_over_shoulder,
-            wrist_on_ground,
-        )
-        max_conf = max(rdl_conf, trx_conf)
-        if max_conf < 0.3:
-            self.exercise_candidate = None
-            return
-
-        prediction = "trx_pike" if trx_conf > rdl_conf else "rdl"
-        self.exercise_candidate = prediction
-        self.classify_frame_count += 1
-        self.exercise_votes[prediction] += 1
-
-        vote_ratio = self.exercise_votes[prediction] / self.classify_frame_count
-        if max_conf >= self.config.exercise_min_confidence and vote_ratio >= self.config.exercise_min_confidence:
-            self._set_exercise_type(prediction)
-            return
-
-        if self.classify_frame_count >= self.config.exercise_classify_frames:
-            final_choice = max(self.exercise_votes, key=self.exercise_votes.get)
-            self._set_exercise_type(final_choice)
-
-    def _process_rdl(
-        self,
-        hip_angle_smooth: float,
-        knee_angle_smooth: float,
-        back_angle_smooth: float,
-        tracking_ok: bool,
-        timestamp_s: float,
-    ) -> List[str]:
-        warnings: List[str] = []
-        should_check = (
-            tracking_ok
-            and not np.isnan(hip_angle_smooth)
-            and hip_angle_smooth < self.config.warning_hip_angle
-        )
-
-        if (
-            should_check
-            and not np.isnan(knee_angle_smooth)
-            and knee_angle_smooth < self.config.knee_warning_angle
-        ):
-            self.knee_warn_counter += 1
-        else:
-            self.knee_warn_counter = 0
-
-        if (
-            should_check
-            and not np.isnan(back_angle_smooth)
-            and back_angle_smooth < self.config.back_warning_angle
-        ):
-            self.back_warn_counter += 1
-        else:
-            self.back_warn_counter = 0
-
-        if self.knee_warn_counter >= self.config.warning_hold_frames:
-            warnings.append("Knees too bent")
-        if self.back_warn_counter >= self.config.warning_hold_frames:
-            warnings.append("Back rounded")
-
-        if tracking_ok and not np.isnan(hip_angle_smooth):
-            if hip_angle_smooth < self.config.hip_down_angle and self.stage != "down":
-                self.stage = "down"
-            elif hip_angle_smooth > self.config.hip_up_angle and self.stage == "down":
-                if self.last_rep_time < 0 or (timestamp_s - self.last_rep_time) >= self.config.min_rep_interval_s:
-                    self.stage = "up"
-                    self.rep_count += 1
-                    self.rep_events.append(timestamp_s)
-                    self.last_rep_time = timestamp_s
-
-        return warnings
-
-    def _process_trx_pike(
-        self,
-        elbow_angle_smooth: float,
-        body_angle_smooth: float,
-        knee_angle_smooth: float,
-        hip_lift_smooth: float,
-        tracking_ok: bool,
-        timestamp_s: float,
-    ) -> List[str]:
-        warnings: List[str] = []
-
-        hip_valid = not np.isnan(hip_lift_smooth)
-        body_valid = not np.isnan(body_angle_smooth)
-        hip_up = hip_valid and hip_lift_smooth > self.config.trx_pike_up_lift
-        hip_down = hip_valid and hip_lift_smooth < self.config.trx_pike_down_lift
-        body_up = body_valid and body_angle_smooth < self.config.trx_pike_up_angle
-        body_down = body_valid and body_angle_smooth > self.config.trx_pike_down_angle
-
-        if hip_valid and body_valid:
-            is_pike_up = hip_up and body_up
-            is_pike_down = hip_down and body_down
-        else:
-            is_pike_up = hip_up or body_up
-            is_pike_down = hip_down or body_down
-
-        if tracking_ok and is_pike_up:
-            self.pike_up_counter += 1
-        else:
-            self.pike_up_counter = 0
-
-        if tracking_ok and is_pike_down:
-            self.pike_down_counter += 1
-        else:
-            self.pike_down_counter = 0
-
-        if self.stage != "pike" and self.pike_up_counter >= self.config.trx_pike_stage_frames:
-            self.stage = "pike"
-            self.pike_down_counter = 0
-        elif self.stage == "pike" and self.pike_down_counter >= self.config.trx_pike_stage_frames:
-            if self.last_rep_time < 0 or (timestamp_s - self.last_rep_time) >= self.config.min_rep_interval_s:
-                self.stage = "plank"
-                self.rep_count += 1
-                self.rep_events.append(timestamp_s)
-                self.last_rep_time = timestamp_s
-            self.pike_up_counter = 0
-
-        should_check = tracking_ok and (
-            (not np.isnan(body_angle_smooth) and body_angle_smooth < self.config.trx_pike_warning_angle)
-            or (not np.isnan(hip_lift_smooth) and hip_lift_smooth > self.config.trx_pike_down_lift)
-        )
-
-        if (
-            should_check
-            and not np.isnan(elbow_angle_smooth)
-            and elbow_angle_smooth < self.config.trx_pike_elbow_warning_angle
-        ):
-            self.elbow_warn_counter += 1
-        else:
-            self.elbow_warn_counter = 0
-
-        if (
-            should_check
-            and not np.isnan(knee_angle_smooth)
-            and knee_angle_smooth < self.config.trx_pike_knee_warning_angle
-        ):
-            self.knee_warn_counter += 1
-        else:
-            self.knee_warn_counter = 0
-
-        if self.elbow_warn_counter >= self.config.warning_hold_frames:
-            warnings.append("Elbows bent")
-        if self.knee_warn_counter >= self.config.warning_hold_frames:
-            warnings.append("Knees bent")
-
-        return warnings
+    @property
+    def exercise_locked(self) -> bool:
+        return self.detector.exercise_locked
 
     def _estimate_trx_straps(self, frame: np.ndarray, landmarks) -> float:
         if not self.config.strap_detection:
