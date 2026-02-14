@@ -30,13 +30,6 @@ MODEL_URLS = {
     ),
 }
 
-DEFAULT_OUTPUT_NAMES = {
-    "video": "rdl_annotated.mp4",
-    "csv": "rdl_metrics.csv",
-    "json": "rdl_metrics.json",
-    "plot": "rdl_angles.png",
-}
-
 OUTPUT_SUFFIXES = {
     "video": "annotated.mp4",
     "csv": "metrics.csv",
@@ -55,10 +48,26 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated extensions for input-dir.",
     )
     parser.add_argument("--output-dir", default="results", help="Directory for outputs.")
-    parser.add_argument("--output-video", default="rdl_annotated.mp4", help="Output video filename.")
-    parser.add_argument("--output-csv", default="rdl_metrics.csv", help="Output CSV filename.")
-    parser.add_argument("--output-json", default="rdl_metrics.json", help="Output JSON filename.")
-    parser.add_argument("--output-plot", default="rdl_angles.png", help="Output plot filename.")
+    parser.add_argument(
+        "--output-video",
+        default=None,
+        help="Output video filename (default: <input_stem>_annotated.mp4; ignored in batch mode).",
+    )
+    parser.add_argument(
+        "--output-csv",
+        default=None,
+        help="Output CSV filename (default: <input_stem>_metrics.csv; ignored in batch mode).",
+    )
+    parser.add_argument(
+        "--output-json",
+        default=None,
+        help="Output JSON filename (default: <input_stem>_metrics.json; ignored in batch mode).",
+    )
+    parser.add_argument(
+        "--output-plot",
+        default=None,
+        help="Output plot filename (default: <input_stem>_angles.png; ignored in batch mode).",
+    )
     parser.add_argument("--hip-down", type=float, default=110.0, help="Hip angle threshold for down position.")
     parser.add_argument("--hip-up", type=float, default=160.0, help="Hip angle threshold for up position.")
     parser.add_argument("--knee-warn", type=float, default=150.0, help="Warn if knee angle below this.")
@@ -315,71 +324,22 @@ def resolve_inputs(args: argparse.Namespace) -> Tuple[List[Path], bool]:
 def build_output_paths(
     output_dir: Path, input_path: Path, batch_mode: bool, args: argparse.Namespace
 ) -> Dict[str, Path]:
-    if batch_mode:
-        output_dir = output_dir / input_path.stem
-        ensure_dir(str(output_dir))
-        return {
-            "video": output_dir / "annotated.mp4",
-            "csv": output_dir / "metrics.csv",
-            "json": output_dir / "metrics.json",
-            "plot": output_dir / "angles.png",
-            "summary": output_dir / "summary.json",
-            "notes": output_dir / "coaching_notes.txt",
-        }
-
+    output_dir = output_dir / input_path.stem
     ensure_dir(str(output_dir))
+
+    def pick_name(key: str, override: Optional[str]) -> str:
+        if override and not batch_mode:
+            return override
+        return OUTPUT_SUFFIXES[key]
+
     return {
-        "video": output_dir / args.output_video,
-        "csv": output_dir / args.output_csv,
-        "json": output_dir / args.output_json,
-        "plot": output_dir / args.output_plot,
+        "video": output_dir / pick_name("video", args.output_video),
+        "csv": output_dir / pick_name("csv", args.output_csv),
+        "json": output_dir / pick_name("json", args.output_json),
+        "plot": output_dir / pick_name("plot", args.output_plot),
         "summary": output_dir / "summary.json",
         "notes": output_dir / "coaching_notes.txt",
     }
-
-
-def uses_default_output_names(args: argparse.Namespace) -> bool:
-    return (
-        args.output_video == DEFAULT_OUTPUT_NAMES["video"]
-        and args.output_csv == DEFAULT_OUTPUT_NAMES["csv"]
-        and args.output_json == DEFAULT_OUTPUT_NAMES["json"]
-        and args.output_plot == DEFAULT_OUTPUT_NAMES["plot"]
-    )
-
-
-def unique_path(path: Path) -> Path:
-    if not path.exists():
-        return path
-    for idx in range(1, 1000):
-        candidate = path.with_name(f"{path.stem}_{idx}{path.suffix}")
-        if not candidate.exists():
-            return candidate
-    raise RuntimeError(f"Unable to find unique filename for {path}")
-
-
-def rename_outputs_if_needed(
-    outputs: Dict[str, Path],
-    detected_exercise: Optional[str],
-    args: argparse.Namespace,
-    batch_mode: bool,
-) -> Dict[str, Path]:
-    if batch_mode or detected_exercise not in {"rdl", "trx_pike"}:
-        return outputs
-    if not uses_default_output_names(args):
-        return outputs
-
-    prefix = "trx" if detected_exercise == "trx_pike" else "rdl"
-    if prefix == "rdl":
-        return outputs
-
-    updated = outputs.copy()
-    for key in ("video", "csv", "json", "plot"):
-        target_name = f"{prefix}_{OUTPUT_SUFFIXES[key]}"
-        target_path = unique_path(outputs[key].with_name(target_name))
-        outputs[key].replace(target_path)
-        updated[key] = target_path
-
-    return updated
 
 
 def process_video(
@@ -438,8 +398,6 @@ def process_video(
     save_csv(str(outputs["csv"]), rows)
     save_json(str(outputs["json"]), rows)
     save_plot(str(outputs["plot"]), rows, analyzer.rep_events)
-
-    outputs = rename_outputs_if_needed(outputs, analyzer.exercise_type, args, batch_mode)
 
     summary = {
         "input": str(input_path),

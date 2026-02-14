@@ -29,7 +29,7 @@ Run from the repo root (important for package imports):
 - Batch mode (all videos in a folder):
   - `python -m src.run --input-dir data`
 - Custom path example:
-  - `python -m src.run --input "C:\Users\Kamila\Downloads\video.mp4"`
+  - `python -m src.run --input "C:\path\to\video.mp4"`
 
 ## How it works (high level)
 - MediaPipe Pose detects landmarks per frame (Solutions API if available, otherwise Tasks API).
@@ -46,30 +46,20 @@ Run from the repo root (important for package imports):
 - Coaching notes are derived from warning frequency and tracking quality.
 
 ## Outputs
-Single video output goes to `results/` by default (change with `--output-dir`). Filenames come from
-the `--output-*` flags. If you keep the defaults and TRX Pike is detected, the outputs are
-auto-renamed to the `trx_*` prefix:
-- `rdl_annotated.mp4` or `trx_annotated.mp4`
-- `rdl_metrics.csv` / `trx_metrics.csv`
-- `rdl_metrics.json` / `trx_metrics.json`
-- `rdl_angles.png` / `trx_angles.png`
-- `summary.json`
-- `coaching_notes.txt` (plain-text recommendations)
+Outputs go to `results/` by default (change with `--output-dir`). Each input video gets its own
+folder so results are easy to find:
+- `results/<input_stem>/annotated.mp4`
+- `results/<input_stem>/metrics.csv`
+- `results/<input_stem>/metrics.json`
+- `results/<input_stem>/angles.png`
+- `results/<input_stem>/summary.json`
+- `results/<input_stem>/coaching_notes.txt` (plain-text recommendations)
 
-Batch mode writes to `results/<input_stem>/` and always uses:
-- `annotated.mp4`
-- `metrics.csv`
-- `metrics.json`
-- `angles.png`
-- `summary.json`
-- `coaching_notes.txt`
+You can override `--output-video/--output-csv/--output-json/--output-plot` for single-video runs,
+but the files still land in `results/<input_stem>/`. Batch mode always uses the default filenames.
 
 Outputs include pose overlays/warnings, per-frame metrics, a hip angle plot with rep markers, and
 plain-text coaching notes. Batch runs also create `results/batch_summary.json`.
-
-## Sample data and results
-- Inputs: `data/rdl_sample.mp4`, `data/trx_sample.mp4`
-- Outputs (already generated): `results/rdl_sample/`, `results/trx_sample/`
 
 ## Key CLI options
 Run `python -m src.run --help` for the full list. Common options:
