@@ -6,7 +6,7 @@
     "output_json": "results\\rdl_correct\\metrics.json",
     "output_plot": "results\\rdl_correct\\angles.png",
     "output_notes": "results\\rdl_correct\\coaching_notes.txt",
-    "frames": 316,
+    "frames": 279,
     "fps": 30.0,
     "total_reps": 3,
     "exercise_mode": "auto",
@@ -42,7 +42,7 @@
       "suppress_far_side": true,
       "side_view_visibility_gap": 0.2
     },
-    "generated_at": "2026-02-15T23:29:33.274482"
+    "generated_at": "2026-02-16T01:47:00.368477"
   },
   {
     "input": "data\\rdl_incorrect.mp4",
@@ -51,7 +51,7 @@
     "output_json": "results\\rdl_incorrect\\metrics.json",
     "output_plot": "results\\rdl_incorrect\\angles.png",
     "output_notes": "results\\rdl_incorrect\\coaching_notes.txt",
-    "frames": 730,
+    "frames": 674,
     "fps": 30.0,
     "total_reps": 3,
     "exercise_mode": "auto",
@@ -87,7 +87,7 @@
       "suppress_far_side": true,
       "side_view_visibility_gap": 0.2
     },
-    "generated_at": "2026-02-15T23:30:44.040666"
+    "generated_at": "2026-02-16T01:47:49.920521"
   },
   {
     "input": "data\\trx_pike_correct.mp4",
@@ -96,7 +96,7 @@
     "output_json": "results\\trx_pike_correct\\metrics.json",
     "output_plot": "results\\trx_pike_correct\\angles.png",
     "output_notes": "results\\trx_pike_correct\\coaching_notes.txt",
-    "frames": 1202,
+    "frames": 1054,
     "fps": 30.0,
     "total_reps": 5,
     "exercise_mode": "auto",
@@ -132,7 +132,7 @@
       "suppress_far_side": true,
       "side_view_visibility_gap": 0.2
     },
-    "generated_at": "2026-02-15T23:32:32.127190"
+    "generated_at": "2026-02-16T01:49:28.360579"
   },
   {
     "input": "data\\trx_pike_incorrect.mp4",
@@ -141,7 +141,7 @@
     "output_json": "results\\trx_pike_incorrect\\metrics.json",
     "output_plot": "results\\trx_pike_incorrect\\angles.png",
     "output_notes": "results\\trx_pike_incorrect\\coaching_notes.txt",
-    "frames": 686,
+    "frames": 646,
     "fps": 30.0,
     "total_reps": 6,
     "exercise_mode": "auto",
@@ -177,6 +177,6 @@
       "suppress_far_side": true,
       "side_view_visibility_gap": 0.2
     },
-    "generated_at": "2026-02-15T23:33:26.808625"
+    "generated_at": "2026-02-16T01:50:39.589275"
   }
 ]

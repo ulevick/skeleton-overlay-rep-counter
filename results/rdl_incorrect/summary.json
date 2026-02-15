@@ -5,7 +5,7 @@
   "output_json": "results\\rdl_incorrect\\metrics.json",
   "output_plot": "results\\rdl_incorrect\\angles.png",
   "output_notes": "results\\rdl_incorrect\\coaching_notes.txt",
-  "frames": 730,
+  "frames": 674,
   "fps": 30.0,
   "total_reps": 3,
   "exercise_mode": "auto",
@@ -41,5 +41,5 @@
     "suppress_far_side": true,
     "side_view_visibility_gap": 0.2
   },
-  "generated_at": "2026-02-15T23:30:44.040666"
+  "generated_at": "2026-02-16T01:47:49.920521"
 }

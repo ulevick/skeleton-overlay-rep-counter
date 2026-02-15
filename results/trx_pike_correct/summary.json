@@ -5,7 +5,7 @@
   "output_json": "results\\trx_pike_correct\\metrics.json",
   "output_plot": "results\\trx_pike_correct\\angles.png",
   "output_notes": "results\\trx_pike_correct\\coaching_notes.txt",
-  "frames": 1202,
+  "frames": 1054,
   "fps": 30.0,
   "total_reps": 5,
   "exercise_mode": "auto",
@@ -41,5 +41,5 @@
     "suppress_far_side": true,
     "side_view_visibility_gap": 0.2
   },
-  "generated_at": "2026-02-15T23:32:32.127190"
+  "generated_at": "2026-02-16T01:49:28.360579"
 }
