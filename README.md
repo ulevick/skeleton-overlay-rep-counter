@@ -34,7 +34,7 @@ Run from the repo root (important for package imports):
 - Batch mode (all videos in a folder):
   - `python -m src.run --input-dir data`
 - Single video:
-  - `python -m src.run --input data/rdl_sample.mp4`
+  - `python -m src.run --input data/example.mp4`
 - Custom path example:
   - `python -m src.run --input "C:\path\to\video.mp4"`
 
