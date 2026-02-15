@@ -118,7 +118,7 @@ class AnalyzerConfig:
     trx_pike_down_lift: float = 0.1
     trx_pike_warning_angle: float = 150.0
     trx_pike_elbow_warning_angle: float = 160.0
-    trx_pike_knee_warning_angle: float = 160.0
+    trx_pike_knee_warning_angle: float = 155.0
     trx_pike_gate_frames: int = 6
     trx_pike_stage_frames: int = 5
     suppress_far_side: bool = True

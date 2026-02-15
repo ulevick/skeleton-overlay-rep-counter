@@ -199,6 +199,31 @@ def build_coaching_notes(
     def ratio(count: int) -> float:
         return count / total_frames if total_frames else 0.0
 
+    def warning_level(count: int) -> str:
+        warning_ratio = ratio(count)
+        if warning_ratio < 0.03:
+            return "low"
+        if warning_ratio < 0.1:
+            return "medium"
+        return "high"
+
+    def push_warning(
+        advice_list: List[str],
+        count: int,
+        low_msg: str,
+        medium_msg: str,
+        high_msg: str,
+    ) -> None:
+        if count <= 0:
+            return
+        level = warning_level(count)
+        if level == "low":
+            advice_list.append(low_msg)
+        elif level == "medium":
+            advice_list.append(medium_msg)
+        else:
+            advice_list.append(high_msg)
+
     lines: List[str] = []
     lines.append("Coaching notes")
     lines.append("=" * 14)
@@ -207,34 +232,67 @@ def build_coaching_notes(
     lines.append("")
 
     advice: List[str] = []
+    warning_levels: List[str] = []
     if exercise == "rdl":
         back_count = warning_counts.get("Back rounded", 0)
         knee_count = warning_counts.get("Knees too bent", 0)
         if back_count:
-            advice.append(
-                "Keep a neutral spine: chest up, hinge at the hips, and reduce the range or load if the back rounds."
+            warning_levels.append(warning_level(back_count))
+            push_warning(
+                advice,
+                back_count,
+                "Occasional back rounding detected; keep a neutral spine and shorten the range if needed.",
+                "Some reps showed back rounding; slow down and keep the chest up while hinging.",
+                "Back rounding was frequent; reduce load or range and prioritize a neutral spine.",
             )
         if knee_count:
-            advice.append(
-                "Soften the knees only slightly and push the hips back; avoid squatting down into the rep."
+            warning_levels.append(warning_level(knee_count))
+            push_warning(
+                advice,
+                knee_count,
+                "Knee bend appeared on a few reps; keep only a soft bend and push the hips back.",
+                "Several reps looked squatty; keep knees softer and hinge more at the hips.",
+                "Knee bend was frequent; reset the hinge pattern and limit depth.",
             )
         if not advice:
             advice.append("Good consistency on back and knee angles. Keep the same hip-hinge pattern.")
     elif exercise == "trx_pike":
         elbow_count = warning_counts.get("Elbows bent", 0)
-        knee_count = warning_counts.get("Knees bent", 0)
+        knee_count = warning_counts.get("Knees slightly bent", 0)
         if elbow_count:
-            advice.append("Keep elbows straighter by pressing the floor away and locking the shoulders down.")
+            warning_levels.append(warning_level(elbow_count))
+            push_warning(
+                advice,
+                elbow_count,
+                "A few frames showed elbow bend; keep arms long and press the floor away.",
+                "Elbows bent on some reps; focus on locked arms and stable shoulders.",
+                "Elbow bend was frequent; reduce range and keep arms straight.",
+            )
         if knee_count:
-            advice.append("Maintain straight legs; shorten the range until you can keep the knees extended.")
+            warning_levels.append(warning_level(knee_count))
+            push_warning(
+                advice,
+                knee_count,
+                "Minor knee bend showed up occasionally; aim for longer legs through the movement.",
+                "Knee bend appeared on some reps; shorten the range until legs stay straighter.",
+                "Knee bend was frequent; limit range and keep legs extended.",
+            )
         if not advice:
             advice.append("Solid form cues. Keep the shoulders stable and the hips lifting smoothly.")
     else:
         advice.append("Exercise type not locked; re-run with --exercise for more specific feedback.")
 
-    if tracking_low and ratio(tracking_low) >= 0.2:
+    if warning_levels and all(level == "low" for level in warning_levels):
+        advice.insert(0, "Overall form looked solid; only small touch-ups are needed.")
+
+    tracking_ratio = ratio(tracking_low)
+    if tracking_low and tracking_ratio >= 0.2:
         advice.append(
             "Tracking was unstable in several frames. Use a clear side view, good lighting, and keep the full body in frame."
+        )
+    elif tracking_low and tracking_ratio >= 0.08:
+        advice.append(
+            "Some frames had low tracking. A clearer side view and steadier framing will help."
         )
 
     lines.append("What to focus on next time:")

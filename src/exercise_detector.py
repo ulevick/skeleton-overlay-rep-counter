@@ -42,9 +42,9 @@ class ExerciseDetector:
         wrist_on_ground: bool,
     ) -> Tuple[float, float]:
         trx_score = 0.0
-        if not np.isnan(hip_lift) and hip_lift > 0.22:
+        if not np.isnan(hip_lift) and hip_lift > 0.18:
             trx_score += 1.6
-        if not np.isnan(body_angle) and body_angle < 120.0:
+        if not np.isnan(body_angle) and body_angle < 135.0:
             trx_score += 1.2
         if ankle_above_hip:
             trx_score += 0.8
@@ -53,8 +53,10 @@ class ExerciseDetector:
         if wrist_below_shoulder:
             trx_score += 0.4
         if hip_over_shoulder:
-            trx_score += 0.8
+            trx_score += 1.0
         if wrist_on_ground:
+            trx_score += 1.0
+        if wrist_on_ground and not np.isnan(body_angle) and body_angle > 145.0:
             trx_score += 0.6
         if not np.isnan(elbow_angle) and elbow_angle > 150.0:
             trx_score += 0.2
@@ -75,9 +77,11 @@ class ExerciseDetector:
         if not np.isnan(hip_lift) and hip_lift < 0.2:
             rdl_score += 0.4
         if hip_over_shoulder:
-            rdl_score -= 0.8
+            rdl_score -= 1.0
         if wrist_on_ground:
-            rdl_score -= 0.4
+            rdl_score -= 1.2
+        if strap_confidence >= 0.5:
+            rdl_score -= 0.5
         rdl_score = max(rdl_score, 0.0)
 
         trx_conf = min(trx_score / 5.4, 1.0)
@@ -130,7 +134,11 @@ class ExerciseDetector:
         if self.exercise_locked:
             return None
 
-        if hip_over_shoulder and wrist_on_ground and not np.isnan(hip_lift) and hip_lift > 0.18:
+        if wrist_on_ground and (
+            (not np.isnan(hip_lift) and hip_lift > 0.12)
+            or (not np.isnan(body_angle) and body_angle > 145.0)
+            or strap_confidence >= 0.4
+        ):
             self.trx_pike_gate_count += 1
         else:
             self.trx_pike_gate_count = 0

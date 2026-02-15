@@ -132,9 +132,19 @@ class RepCounter:
                 self.last_rep_time = timestamp_s
             self.pike_up_counter = 0
 
-        should_check = tracking_ok and (
-            (not np.isnan(body_angle_smooth) and body_angle_smooth < config.trx_pike_warning_angle)
-            or (not np.isnan(hip_lift_smooth) and hip_lift_smooth > config.trx_pike_down_lift)
+        pike_signal = False
+        if not np.isnan(body_angle_smooth) and not np.isnan(hip_lift_smooth):
+            pike_signal = (
+                body_angle_smooth < config.trx_pike_warning_angle
+                and hip_lift_smooth > config.trx_pike_down_lift
+            )
+        elif not np.isnan(body_angle_smooth):
+            pike_signal = body_angle_smooth < config.trx_pike_warning_angle
+        elif not np.isnan(hip_lift_smooth):
+            pike_signal = hip_lift_smooth > config.trx_pike_down_lift
+
+        should_check = tracking_ok and pike_signal and (
+            self.stage == "pike" or self.pike_up_counter >= config.trx_pike_stage_frames
         )
 
         if (
@@ -146,10 +156,13 @@ class RepCounter:
         else:
             self.elbow_warn_counter = 0
 
+        knee_threshold = config.trx_pike_knee_warning_angle - 5.0
+        knee_ok_signal = not np.isnan(hip_lift_smooth) and hip_lift_smooth > config.trx_pike_up_lift * 0.9
         if (
             should_check
             and not np.isnan(knee_angle_smooth)
-            and knee_angle_smooth < config.trx_pike_knee_warning_angle
+            and knee_ok_signal
+            and knee_angle_smooth < knee_threshold
         ):
             self.knee_warn_counter += 1
         else:
@@ -158,6 +171,6 @@ class RepCounter:
         if self.elbow_warn_counter >= config.warning_hold_frames:
             warnings.append("Elbows bent")
         if self.knee_warn_counter >= config.warning_hold_frames:
-            warnings.append("Knees bent")
+            warnings.append("Knees slightly bent")
 
         return warnings
