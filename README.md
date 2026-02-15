@@ -19,7 +19,7 @@ it overlays a pose skeleton, counts reps, and generates data-driven feedback so 
 - `src/exercise_detector.py` exercise auto-detection and confidence scoring
 - `src/rep_counter.py` rep counting logic and warning thresholds
 - `src/utils.py` geometry helpers
-- `data/` sample videos and MediaPipe models
+- `data/` sample videos (correct + incorrect form) and MediaPipe models
 - `results/` sample outputs for the provided videos
 - `requirements.txt` Python dependencies
 
@@ -47,11 +47,12 @@ Run from the repo root (important for package imports):
   - Elbow: shoulder–elbow–wrist
   - Body: shoulder–hip–ankle
 - Angles are smoothed with a sliding window before decisions are made.
-- RDL reps are counted by hip-angle stage transitions (`--hip-down` / `--hip-up`) with
-  a minimum time between reps.
+- RDL reps are counted by hip-angle stage transitions, using `--hip-down` / `--hip-up`
+  thresholds that are adjusted by the observed upright hip baseline (min range + return
+  margin) and a minimum time between reps.
 - TRX Pike reps use hip-lift + body-angle stages (plank - pike - plank) with minimum timing.
-- Exercise type can be auto-detected using heuristic scores and a short voting window.
-- Optional TRX strap edge detection helps confirm TRX Pike scenarios.
+- Exercise type can be auto-detected using heuristic scores and a short voting window;
+  TRX Pike can also lock early when plank-like signals and strap/hip-lift cues are present.
 - Warnings are emitted only when tracking is good and thresholds are held for N frames.
 - Coaching notes are derived from warning frequency and tracking quality.
 
@@ -60,7 +61,7 @@ By default, outputs are written to `results/<input_stem>/` (change root with `--
 - `annotated.mp4` — video with pose overlay, rep counter, and warnings.
 - `metrics.csv` — per-frame numeric metrics (angles, tracking, stage, warnings).
 - `metrics.json` — same metrics as JSON for easier parsing.
-- `angles.png` — hip angle plot with rep markers (RDL).
+- `angles.png` — hip angle plot with rep markers (most meaningful for RDL; still generated for other modes).
 - `summary.json` — run summary (inputs, outputs, reps, config, timestamps).
 - `coaching_notes.txt` — plain-text recommendations based on detected issues.
 
@@ -74,7 +75,8 @@ Run `python -m src.run --help` for the full list. Most commonly used:
 
 ## MediaPipe models
 If the MediaPipe Solutions API is unavailable, the code switches to the Tasks API and needs a
-`.task` model file. This repo already includes:
+`.task` model file. If the file is missing, it is downloaded automatically. You can also
+pre-place model files in `data/models/`:
 - `data/models/pose_landmarker_lite.task`
 - `data/models/pose_landmarker_full.task`
 - `data/models/pose_landmarker_heavy.task`

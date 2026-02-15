@@ -98,6 +98,8 @@ POSE_CONNECTIONS = [
 class AnalyzerConfig:
     hip_down_angle: float = 110.0
     hip_up_angle: float = 160.0
+    rdl_min_range_deg: float = 20.0
+    rdl_return_margin_deg: float = 5.0
     knee_warning_angle: float = 150.0
     back_warning_angle: float = 160.0
     warning_hip_angle: float = 150.0

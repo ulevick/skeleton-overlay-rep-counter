@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 import numpy as np
 
@@ -20,6 +20,7 @@ class RepCounter:
     elbow_warn_counter: int = 0
     pike_up_counter: int = 0
     pike_down_counter: int = 0
+    hip_up_baseline: Optional[float] = None
 
     def reset_for_exercise(self, exercise: str) -> None:
         self.rep_count = 0
@@ -30,6 +31,7 @@ class RepCounter:
         self.elbow_warn_counter = 0
         self.pike_up_counter = 0
         self.pike_down_counter = 0
+        self.hip_up_baseline = None
         self.stage = "up" if exercise == "rdl" else "plank"
 
     def process_rdl(
@@ -73,9 +75,25 @@ class RepCounter:
             warnings.append("Back rounded")
 
         if tracking_ok and not np.isnan(hip_angle_smooth):
-            if hip_angle_smooth < config.hip_down_angle and self.stage != "down":
+            if self.stage == "up":
+                if self.hip_up_baseline is None:
+                    self.hip_up_baseline = hip_angle_smooth
+                else:
+                    self.hip_up_baseline = max(self.hip_up_baseline, hip_angle_smooth)
+
+            down_threshold = config.hip_down_angle
+            up_threshold = config.hip_up_angle
+            if self.hip_up_baseline is not None:
+                down_threshold = max(
+                    down_threshold, self.hip_up_baseline - config.rdl_min_range_deg
+                )
+                up_threshold = min(
+                    up_threshold, self.hip_up_baseline - config.rdl_return_margin_deg
+                )
+
+            if hip_angle_smooth < down_threshold and self.stage != "down":
                 self.stage = "down"
-            elif hip_angle_smooth > config.hip_up_angle and self.stage == "down":
+            elif hip_angle_smooth > up_threshold and self.stage == "down":
                 if self.last_rep_time < 0 or (timestamp_s - self.last_rep_time) >= config.min_rep_interval_s:
                     self.stage = "up"
                     self.rep_count += 1
